@@ -398,8 +398,17 @@
       <div class="btn-group">
         <button class="btn btn-outline" id="exportDataBtn">📥 导出学习数据</button>
         <button class="btn btn-outline" id="importDataBtn">📤 导入学习数据</button>
+        <button class="btn btn-outline" id="pushToGithubBtn" disabled>🚀 同步到 GitHub</button>
         <button class="btn btn-outline" id="clearDataBtn">🗑️ 清除学习数据</button>
         <span class="badge-count" id="dataStats">0 条规则</span>
+      </div>
+    </div>
+
+    <div class="toolbar" id="githubConfig" style="display:none;">
+      <div class="btn-group">
+        <input type="text" id="githubToken" placeholder="GitHub Token" style="padding:6px 12px;border:1px solid #e4ebf5;border-radius:20px;font-size:0.85rem;width:180px;">
+        <input type="text" id="githubRepo" placeholder="GitHub Repo (owner/repo)" style="padding:6px 12px;border:1px solid #e4ebf5;border-radius:20px;font-size:0.85rem;width:200px;">
+        <button class="btn btn-outline" id="saveGithubConfigBtn">💾 保存配置</button>
       </div>
     </div>
 
@@ -479,6 +488,11 @@
     const importDataBtn = document.getElementById('importDataBtn');
     const clearDataBtn = document.getElementById('clearDataBtn');
     const dataStats = document.getElementById('dataStats');
+    const pushToGithubBtn = document.getElementById('pushToGithubBtn');
+    const githubConfig = document.getElementById('githubConfig');
+    const githubToken = document.getElementById('githubToken');
+    const githubRepo = document.getElementById('githubRepo');
+    const saveGithubConfigBtn = document.getElementById('saveGithubConfigBtn');
     // 状态
     let originalImageData = null;
     let currentImageData = null;
@@ -2242,6 +2256,113 @@
 
     // 初始化时更新统计
     updateDataStats();
+
+    function loadGithubConfig() {
+      const token = localStorage.getItem('github_token');
+      const repo = localStorage.getItem('github_repo');
+      if (token && repo) {
+        githubToken.value = token;
+        githubRepo.value = repo;
+        pushToGithubBtn.disabled = false;
+        githubConfig.style.display = 'none';
+        return true;
+      }
+      return false;
+    }
+
+    function saveGithubConfig() {
+      const token = githubToken.value.trim();
+      const repo = githubRepo.value.trim();
+      if (token && repo) {
+        localStorage.setItem('github_token', token);
+        localStorage.setItem('github_repo', repo);
+        pushToGithubBtn.disabled = false;
+        githubConfig.style.display = 'none';
+        statusBadge.innerText = '💾 GitHub 配置已保存';
+      } else {
+        statusBadge.innerText = '⚠️ 请填写完整的 GitHub Token 和仓库地址';
+      }
+    }
+
+    pushToGithubBtn.addEventListener('click', function() {
+      if (!loadGithubConfig()) {
+        githubConfig.style.display = 'block';
+        statusBadge.innerText = '⚠️ 请先配置 GitHub Token 和仓库地址';
+        return;
+      }
+      pushToGithub();
+    });
+
+    saveGithubConfigBtn.addEventListener('click', saveGithubConfig);
+
+    async function pushToGithub() {
+      const token = localStorage.getItem('github_token');
+      const repo = localStorage.getItem('github_repo');
+      const content = typeof window.exportLearnedData === 'function' ? window.exportLearnedData() : '';
+      
+      if (!token || !repo || !content) {
+        statusBadge.innerText = '⚠️ 配置不完整';
+        return;
+      }
+
+      statusBadge.innerText = '🚀 正在同步到 GitHub...';
+      pushToGithubBtn.disabled = true;
+
+      try {
+        const filePath = 'learn_data.js';
+        const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+
+        let sha = null;
+        if (response.status === 200) {
+          const data = await response.json();
+          sha = data.sha;
+        }
+
+        const base64Content = btoa(unescape(encodeURIComponent(content)));
+
+        const commitData = {
+          message: `更新学习数据 - ${new Date().toLocaleString()}`,
+          content: base64Content,
+          branch: 'main'
+        };
+
+        if (sha) {
+          commitData.sha = sha;
+        }
+
+        const commitResponse = await fetch(apiUrl, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(commitData)
+        });
+
+        if (commitResponse.ok) {
+          statusBadge.innerText = '✅ 已成功同步到 GitHub';
+        } else {
+          const errorData = await commitResponse.json();
+          statusBadge.innerText = `❌ 同步失败: ${errorData.message || '未知错误'}`;
+          console.error('GitHub API 错误:', errorData);
+        }
+      } catch (error) {
+        statusBadge.innerText = `❌ 同步失败: ${error.message}`;
+        console.error('同步错误:', error);
+      } finally {
+        pushToGithubBtn.disabled = false;
+      }
+    }
+
+    loadGithubConfig();
 
     blurLevelInput.addEventListener('input', function() {
       blurValueLabel.textContent = this.value;
