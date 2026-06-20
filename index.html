@@ -2258,20 +2258,22 @@
     updateDataStats();
 
     function loadGithubConfig() {
-      const DEFAULT_TOKEN = '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';
       const DEFAULT_REPO = 'muchengxin25-creator/OCR-ps';
       
       let token = localStorage.getItem('github_token');
       let repo = localStorage.getItem('github_repo');
       
-      if (!token) token = DEFAULT_TOKEN;
       if (!repo) repo = DEFAULT_REPO;
       
-      githubToken.value = token;
+      githubToken.value = token || '';
       githubRepo.value = repo;
-      pushToGithubBtn.disabled = false;
-      githubConfig.style.display = 'none';
-      return true;
+      
+      if (token && repo) {
+        pushToGithubBtn.disabled = false;
+        githubConfig.style.display = 'none';
+        return true;
+      }
+      return false;
     }
 
     function saveGithubConfig() {
@@ -2297,19 +2299,19 @@
     saveGithubConfigBtn.addEventListener('click', saveGithubConfig);
 
     async function pushToGithub() {
-      const DEFAULT_TOKEN = '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';
       const DEFAULT_REPO = 'muchengxin25-creator/OCR-ps';
       
       let token = localStorage.getItem('github_token');
       let repo = localStorage.getItem('github_repo');
       
-      if (!token) token = DEFAULT_TOKEN;
       if (!repo) repo = DEFAULT_REPO;
       
       const content = typeof window.exportLearnedData === 'function' ? window.exportLearnedData() : '';
       
       if (!token || !repo || !content) {
-        statusBadge.innerText = '⚠️ 配置不完整';
+        statusBadge.innerText = '⚠️ 请先配置 GitHub Token';
+        alert('⚠️ 请先配置 GitHub Token\n\n1. 点击"🚀 同步到 GitHub"按钮\n2. 输入你的 GitHub Token\n3. 点击"保存配置"');
+        githubConfig.style.display = 'block';
         return;
       }
 
@@ -2317,49 +2319,28 @@
       pushToGithubBtn.disabled = true;
 
       try {
-        const filePath = 'learn_data.js';
-        const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
-
+        const apiUrl = `https://api.github.com/repos/${repo}/actions/workflows/update-learn-data.yml/dispatches`;
+        
         const response = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `token ${token}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-
-        let sha = null;
-        if (response.status === 200) {
-          const data = await response.json();
-          sha = data.sha;
-        }
-
-        const base64Content = btoa(unescape(encodeURIComponent(content)));
-
-        const commitData = {
-          message: `更新学习数据 - ${new Date().toLocaleString()}`,
-          content: base64Content,
-          branch: 'main'
-        };
-
-        if (sha) {
-          commitData.sha = sha;
-        }
-
-        const commitResponse = await fetch(apiUrl, {
-          method: 'PUT',
+          method: 'POST',
           headers: {
             'Authorization': `token ${token}`,
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(commitData)
+          body: JSON.stringify({
+            ref: 'main',
+            inputs: {
+              data: content
+            }
+          })
         });
 
-        if (commitResponse.ok) {
-          statusBadge.innerText = '✅ 已成功同步到 GitHub';
-          alert('🎉 同步成功！\n\n学习数据已成功提交到 GitHub 仓库。\n其他用户刷新页面即可看到更新。');
+        if (response.ok) {
+          statusBadge.innerText = '✅ 已触发同步，正在处理中...';
+          alert('🎉 同步请求已发送！\n\nGitHub Actions 正在处理更新，请等待几分钟后刷新页面查看效果。');
         } else {
-          const errorData = await commitResponse.json();
+          const errorData = await response.json();
           statusBadge.innerText = `❌ 同步失败: ${errorData.message || '未知错误'}`;
           console.error('GitHub API 错误:', errorData);
         }
