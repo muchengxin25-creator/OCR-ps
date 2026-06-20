@@ -1,0 +1,2276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>智能马赛克 · OCR精确打码</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="learn_data.js"></script>
+  <script src="learn.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 1100px;
+      width: 100%;
+      background: white;
+      border-radius: 32px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+      padding: 28px 24px 32px;
+    }
+    h1 { font-size: 1.8rem; font-weight: 600; color: #0b1b33; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .subhead {
+      color: #5a6a7e;
+      font-size: 0.95rem;
+      border-left: 3px solid #3b82f6;
+      padding-left: 16px;
+      margin-bottom: 24px;
+      background: #f8faff;
+      border-radius: 0 12px 12px 0;
+      line-height: 1.5;
+    }
+    .upload-area {
+      border: 2px dashed #d0d9e8;
+      border-radius: 24px;
+      padding: 40px 20px;
+      text-align: center;
+      background: #fafcff;
+      transition: border-color 0.2s, background 0.2s;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    .upload-area:hover { border-color: #3b82f6; background: #f2f6fe; }
+    .upload-area.dragover { border-color: #2563eb; background: #e8f0fe; box-shadow: inset 0 0 0 4px rgba(59, 130, 246, 0.15); }
+    .upload-icon { font-size: 2.8rem; display: block; margin-bottom: 12px; }
+    .upload-text { font-weight: 500; color: #1e2a44; font-size: 1.1rem; }
+    .upload-hint { color: #6b7b93; font-size: 0.9rem; margin-top: 8px; }
+    .paste-hint {
+      color: #3b82f6;
+      font-weight: 500;
+      margin-top: 6px;
+      font-size: 0.9rem;
+      background: #eef4ff;
+      padding: 4px 14px;
+      border-radius: 40px;
+      display: inline-block;
+    }
+    #fileInput { display: none; }
+
+    .main-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      background: #f0f2f6;
+      border-radius: 20px;
+      overflow: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+      display: none;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 200px;
+      max-height: 70vh;
+    }
+    .canvas-wrapper.active { display: flex; }
+    #imageCanvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      background: #ffffff;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .keyword-section {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      background: #f2f6fe;
+      padding: 12px 18px;
+      border-radius: 16px;
+      border: 1px solid #e4ebf5;
+    }
+    .keyword-section label {
+      font-weight: 600;
+      color: #1f2b44;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+    .keyword-section input[type="text"] {
+      flex: 1;
+      min-width: 200px;
+      padding: 8px 14px;
+      border-radius: 40px;
+      border: 1px solid #d0d9e8;
+      font-size: 0.95rem;
+      outline: none;
+      background: white;
+      transition: border-color 0.2s;
+    }
+    .keyword-section input[type="text"]:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .keyword-section .btn {
+      background: #1e2a44;
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 40px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .keyword-section .btn:hover { background: #0b1b33; transform: scale(0.97); }
+    .keyword-section .btn:disabled { opacity: 0.4; pointer-events: none; transform: scale(0.98); }
+    .keyword-section .btn-outline {
+      background: transparent;
+      border: 1px solid #d0d9e8;
+      color: #1e2a44;
+    }
+    .keyword-section .btn-outline:hover { background: #f2f6fe; border-color: #a0b3d0; transform: none; }
+    .keyword-section .btn-success {
+      background: #0a5c36;
+      color: white;
+    }
+    .keyword-section .btn-success:hover { background: #084a2b; transform: scale(0.97); }
+    .keyword-section .btn-danger {
+      background: #b91c1c;
+      color: white;
+    }
+    .keyword-section .btn-danger:hover { background: #991616; transform: scale(0.97); }
+    .keyword-section .badge-count {
+      background: #1e2a44;
+      color: white;
+      border-radius: 40px;
+      padding: 2px 14px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .keyword-section .hint-text {
+      font-size: 0.75rem;
+      color: #8898aa;
+      margin-left: 8px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px 16px;
+      margin: 10px 0 6px;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn {
+      background: #f0f4fe;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 60px;
+      font-weight: 500;
+      font-size: 0.85rem;
+      color: #1e2a44;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+    .btn-outline { background: transparent; border: 1px solid #d0d9e8; }
+    .btn-outline:hover { background: #f2f6fe; border-color: #a0b3d0; }
+    .btn-danger { background: #fee9e7; color: #b91c1c; }
+    .btn-danger:hover { background: #fdd9d6; }
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f2f6fe;
+      padding: 2px 16px 2px 12px;
+      border-radius: 60px;
+      border: 1px solid #e4ebf5;
+    }
+    .slider-container label { font-size: 0.85rem; font-weight: 500; color: #1f2b44; white-space: nowrap; }
+    input[type="range"] {
+      width: 100px;
+      height: 6px;
+      -webkit-appearance: none;
+      background: #cbd5e1;
+      border-radius: 10px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #1e2a44;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .status-badge {
+      font-size: 0.8rem;
+      background: #eef2f7;
+      padding: 4px 14px;
+      border-radius: 40px;
+      color: #2e405b;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .footer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      border-top: 1px solid #eef2f8;
+      padding-top: 16px;
+    }
+    .download-btn {
+      background: #0b1b33;
+      color: white;
+      border: none;
+      padding: 10px 28px;
+      border-radius: 60px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 8px 18px rgba(11, 27, 51, 0.12);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .download-btn:hover { background: #1a2d4e; transform: scale(0.97); }
+    .download-btn:disabled { opacity: 0.4; pointer-events: none; transform: scale(0.98); }
+    .clear-btn {
+      background: transparent;
+      border: 1px solid #dbe0e8;
+      padding: 10px 22px;
+      border-radius: 60px;
+      font-weight: 500;
+      color: #3f4f67;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+    .clear-btn:hover { background: #f2f6fc; border-color: #b0c0d4; }
+    @media (max-width: 640px) {
+      .container { padding: 16px 12px; }
+      .keyword-section { flex-direction: column; align-items: stretch; }
+      .keyword-section input[type="text"] { min-width: unset; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .slider-container { justify-content: space-between; }
+      .status-badge { margin-left: 0; }
+      .footer-actions { flex-direction: column; gap: 14px; align-items: stretch; }
+      .download-btn { justify-content: center; }
+    }
+    .info-note {
+      font-size: 0.8rem;
+      color: #6b7b93;
+      margin: 6px 0 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .highlight-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .marker-info {
+      font-size: 0.75rem;
+      color: #6b7b93;
+      padding: 2px 10px;
+      background: #f0f2f6;
+      border-radius: 20px;
+    }
+    .ocr-progress {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: #f0f6fe;
+      border-radius: 12px;
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: #1e2a44;
+    }
+    .ocr-progress.active { display: flex; }
+    .ocr-progress-bar {
+      flex: 1;
+      height: 6px;
+      background: #e4ebf5;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .ocr-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .ocr-progress-text {
+      min-width: 120px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ocr-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #f2f6fe;
+      border-radius: 60px;
+      border: 1px solid #e4ebf5;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #1f2b44;
+      transition: all 0.15s;
+    }
+    .ocr-toggle:hover { background: #e8f0fe; }
+    .ocr-toggle.active {
+      background: #1e2a44;
+      color: white;
+      border-color: #1e2a44;
+    }
+    .ocr-toggle input { display: none; }
+    .lang-select {
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid #d0d9e8;
+      font-size: 0.8rem;
+      background: white;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔍 关键词标记 · 智能打码</h1>
+  <div class="subhead">
+    上传图片 → 输入关键词（如 @ $ USD com）→ 标记区域 → 一键打码
+  </div>
+
+  <div class="upload-area" id="uploadArea">
+    <span class="upload-icon">🖼️</span>
+    <div class="upload-text">点击或拖拽图片到此处</div>
+    <div class="upload-hint">支持 JPG / PNG / WebP</div>
+    <div class="paste-hint">📋 或直接 Ctrl+V / Cmd+V 粘贴图片</div>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="main-layout">
+    <div class="canvas-wrapper" id="canvasWrapper">
+      <canvas id="imageCanvas"></canvas>
+    </div>
+
+    <div class="keyword-section">
+      <label>📍 自动识别</label>
+      <button class="btn" id="markBtn" disabled>📍 自动识别敏感区域</button>
+      <button class="btn btn-success" id="applyMarkedBtn" disabled>🎯 打码标记区域</button>
+      <button class="btn btn-outline" id="deleteMarkerBtn" disabled>🗑️ 删除标记</button>
+      <button class="btn btn-outline" id="whitelistBtn" disabled>➕ 加入白名单</button>
+      <button class="btn btn-outline" id="blacklistBtn" disabled>🚫 加入黑名单</button>
+      <button class="btn btn-outline" id="clearMarkersBtn" disabled>✕ 清除全部</button>
+      <span class="badge-count" id="markerCount">0 个区域</span>
+    </div>
+
+    <div class="toolbar">
+      <div class="btn-group">
+        <button class="btn btn-outline" id="exportDataBtn">📥 导出学习数据</button>
+        <button class="btn btn-outline" id="importDataBtn">📤 导入学习数据</button>
+        <button class="btn btn-outline" id="clearDataBtn">🗑️ 清除学习数据</button>
+        <span class="badge-count" id="dataStats">0 条规则</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="btn-group">
+        <button class="btn btn-outline" id="emailToggle" style="background:#3b82f6;color:#fff;border-color:#3b82f6;">📧 邮箱识别</button>
+        <button class="btn btn-outline" id="amountToggle" style="background:#3b82f6;color:#fff;border-color:#3b82f6;">💰 金额识别</button>
+        <input type="text" id="customKeywordInput" placeholder="其他关键字" style="padding:6px 12px;border:1px solid #e4ebf5;border-radius:20px;font-size:0.85rem;width:120px;">
+        <button class="btn btn-outline" id="undoBtn" disabled>↩ 撤销</button>
+        <button class="btn btn-outline" id="clearMosaicBtn" disabled>✕ 清除马赛克</button>
+      </div>
+      <label class="ocr-toggle" id="ocrToggle">
+        <input type="checkbox" id="ocrModeCheckbox">
+        <span id="ocrToggleText">🔮 OCR精确模式</span>
+        <select class="lang-select" id="ocrLangSelect">
+          <option value="chi_sim">中文</option>
+          <option value="eng">英文</option>
+          <option value="chi_sim+eng">中英</option>
+        </select>
+      </label>
+      <div class="slider-container">
+        <label for="blurLevel">模糊强度</label>
+        <input type="range" id="blurLevel" min="2" max="16" value="6" step="1">
+        <span id="blurValueLabel" style="min-width:28px;font-weight:500;">6</span>
+      </div>
+      <span class="status-badge" id="statusBadge">⚪ 未选择</span>
+    </div>
+
+    <div class="ocr-progress" id="ocrProgress">
+      <span class="ocr-progress-text" id="ocrProgressText">正在识别文字...</span>
+      <div class="ocr-progress-bar">
+        <div class="ocr-progress-fill" id="ocrProgressFill"></div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <button class="clear-btn" id="resetBtn">🔄 重新上传</button>
+      <button class="download-btn" id="downloadBtn" disabled>⬇ 下载打码图片</button>
+    </div>
+    <div class="info-note">
+      <span>💡 关键词用空格分隔 · 🔮OCR模式可精确识别文字并匹配 · ✏️即时打码=框选直接马赛克</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // DOM
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const canvas = document.getElementById('imageCanvas');
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    const blurLevelInput = document.getElementById('blurLevel');
+    const blurValueLabel = document.getElementById('blurValueLabel');
+    const statusBadge = document.getElementById('statusBadge');
+    const undoBtn = document.getElementById('undoBtn');
+    const clearMosaicBtn = document.getElementById('clearMosaicBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const markBtn = document.getElementById('markBtn');
+    const applyMarkedBtn = document.getElementById('applyMarkedBtn');
+    const deleteMarkerBtn = document.getElementById('deleteMarkerBtn');
+    const whitelistBtn = document.getElementById('whitelistBtn');
+    const blacklistBtn = document.getElementById('blacklistBtn');
+    const clearMarkersBtn = document.getElementById('clearMarkersBtn');
+    const markerCount = document.getElementById('markerCount');
+    const ocrToggle = document.getElementById('ocrToggle');
+    const ocrModeCheckbox = document.getElementById('ocrModeCheckbox');
+    const ocrLangSelect = document.getElementById('ocrLangSelect');
+    const ocrProgress = document.getElementById('ocrProgress');
+    const ocrProgressFill = document.getElementById('ocrProgressFill');
+    const ocrProgressText = document.getElementById('ocrProgressText');
+    const emailToggle = document.getElementById('emailToggle');
+    const amountToggle = document.getElementById('amountToggle');
+    const customKeywordInput = document.getElementById('customKeywordInput');
+    const exportDataBtn = document.getElementById('exportDataBtn');
+    const importDataBtn = document.getElementById('importDataBtn');
+    const clearDataBtn = document.getElementById('clearDataBtn');
+    const dataStats = document.getElementById('dataStats');
+    // 状态
+    let originalImageData = null;
+    let currentImageData = null;
+    let mosaicHistory = [];
+    let imageLoaded = false;
+    let isMosaicApplied = false;
+    let markedRegions = []; // 存储标记的区域 [{x1,y1,x2,y2}]
+    let isMarking = false;
+    let isDeleteMode = false;    // 删除标记模式
+    let isWhitelistMode = false; // 白名单模式
+    let isBlacklistMode = false; // 黑名单模式
+    let ocrModeEnabled = false;   // OCR精确模式
+    let emailEnabled = true;      // 邮箱识别开关
+    let amountEnabled = true;     // 金额识别开关
+    let ocrWorker = null;          // Tesseract worker
+    let cachedImageData = null;     // 缓存当前图片数据用于OCR
+    let isRecognizing = false;      // 是否正在识别
+    let shouldCancelRecognition = false; // 是否取消识别
+    let recognitionPromise = null;   // 当前识别Promise
+
+    // ---- 从learn.js加载白名单和学习数据 ----
+    function loadWhitelist() {
+      if (typeof window.loadWhitelistData === 'function') {
+        return window.loadWhitelistData();
+      }
+      return [];
+    }
+
+    function saveWhitelist(text) {
+      if (typeof window.saveWhitelistData === 'function') {
+        window.saveWhitelistData(text);
+      }
+    }
+
+    function loadBlacklist() {
+      if (typeof window.loadBlacklistData === 'function') {
+        return window.loadBlacklistData();
+      }
+      return [];
+    }
+
+    // ---- 辅助 ----
+    function updateUI() {
+      const hasImage = imageLoaded;
+      downloadBtn.disabled = !hasImage;
+      markBtn.disabled = !hasImage;
+      applyMarkedBtn.disabled = !hasImage || markedRegions.length === 0;
+      deleteMarkerBtn.disabled = !hasImage || markedRegions.length === 0;
+      // 白名单/黑名单按钮：只要有图片就可以按（框选区域模式）
+      whitelistBtn.disabled = !hasImage;
+      blacklistBtn.disabled = !hasImage;
+      clearMarkersBtn.disabled = !hasImage || markedRegions.length === 0;
+      if (!hasImage) {
+        clearMosaicBtn.disabled = true;
+        undoBtn.disabled = true;
+        return;
+      }
+      clearMosaicBtn.disabled = !isMosaicApplied;
+      undoBtn.disabled = mosaicHistory.length === 0;
+      markerCount.textContent = `${markedRegions.length} 个区域`;
+      // 更新按钮激活状态
+      deleteMarkerBtn.style.background = isDeleteMode ? '#b91c1c' : '';
+      deleteMarkerBtn.style.color = isDeleteMode ? '#fff' : '';
+      deleteMarkerBtn.style.borderColor = isDeleteMode ? '#b91c1c' : '';
+      whitelistBtn.style.background = isWhitelistMode ? '#16a34a' : '';
+      whitelistBtn.style.color = isWhitelistMode ? '#fff' : '';
+      whitelistBtn.style.borderColor = isWhitelistMode ? '#16a34a' : '';
+      blacklistBtn.style.background = isBlacklistMode ? '#7c2d12' : '';
+      blacklistBtn.style.color = isBlacklistMode ? '#fff' : '';
+      blacklistBtn.style.borderColor = isBlacklistMode ? '#7c2d12' : '';
+    }
+
+    function resetAll() {
+      originalImageData = null;
+      currentImageData = null;
+      mosaicHistory = [];
+      imageLoaded = false;
+      isMosaicApplied = false;
+      markedRegions = [];
+      isDeleteMode = false;
+      isWhitelistMode = false;
+      isBlacklistMode = false;
+      ocrModeEnabled = false;
+      cachedImageData = null;
+      canvasWrapper.classList.remove('active');
+      canvas.width = 0;
+      canvas.height = 0;
+      statusBadge.innerText = '⚪ 未选择';
+      undoBtn.disabled = true;
+      clearMosaicBtn.disabled = true;
+      downloadBtn.disabled = true;
+      markBtn.disabled = true;
+      applyMarkedBtn.disabled = true;
+      clearMarkersBtn.disabled = true;
+      ocrToggle.classList.remove('active');
+      ocrProgress.classList.remove('active');
+      fileInput.value = '';
+      markerCount.textContent = '0 个区域';
+      updateUI();
+    }
+
+    // ---- 图片加载 ----
+    function loadImageFromDataUrl(dataUrl) {
+      const img = new Image();
+      img.onload = function() {
+        // 保持原始尺寸
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false; // 禁用平滑缩放，保持清晰
+        ctx.drawImage(img, 0, 0);
+        originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        currentImageData = originalImageData;
+        // 缓存图片数据用于OCR
+        cachedImageData = canvas.toDataURL();
+        imageLoaded = true;
+        isMosaicApplied = false;
+        mosaicHistory = [];
+        markedRegions = [];
+        undoBtn.disabled = true;
+        clearMosaicBtn.disabled = true;
+        canvasWrapper.classList.add('active');
+        statusBadge.innerText = '⚪ 无马赛克';
+        updateUI();
+      };
+      img.src = dataUrl;
+    }
+
+    function loadImageFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        loadImageFromDataUrl(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ---- 粘贴 ----
+    document.addEventListener('paste', function(e) {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            resetAll();
+            loadImageFromFile(file);
+            e.preventDefault();
+            statusBadge.innerText = '📋 已粘贴图片';
+            break;
+          }
+        }
+      }
+    });
+
+    // ---- 马赛克核心 ----
+    function applyMosaicToImageData(imageData, x1, y1, x2, y2, blurSize) {
+      const data = imageData.data;
+      const w = imageData.width;
+      const left = Math.max(0, Math.min(x1, x2));
+      const right = Math.min(w, Math.max(x1, x2));
+      const top = Math.max(0, Math.min(y1, y2));
+      const bottom = Math.min(imageData.height, Math.max(y1, y2));
+      if (right - left < 2 || bottom - top < 2) return;
+
+      const blockSize = Math.max(2, Math.floor(blurSize));
+      for (let y = top; y < bottom; y += blockSize) {
+        for (let x = left; x < right; x += blockSize) {
+          let r = 0, g = 0, b = 0, a = 0, count = 0;
+          const bxEnd = Math.min(x + blockSize, right);
+          const byEnd = Math.min(y + blockSize, bottom);
+          for (let py = y; py < byEnd; py++) {
+            for (let px = x; px < bxEnd; px++) {
+              const idx = (py * w + px) * 4;
+              r += data[idx]; g += data[idx+1]; b += data[idx+2]; a += data[idx+3];
+              count++;
+            }
+          }
+          if (count === 0) continue;
+          const avgR = Math.round(r/count), avgG = Math.round(g/count), avgB = Math.round(b/count), avgA = Math.round(a/count);
+          for (let py = y; py < byEnd; py++) {
+            for (let px = x; px < bxEnd; px++) {
+              const idx = (py * w + px) * 4;
+              data[idx] = avgR; data[idx+1] = avgG; data[idx+2] = avgB; data[idx+3] = avgA;
+            }
+          }
+        }
+      }
+    }
+
+    function pushHistory() {
+      if (!imageLoaded) return;
+      const ctx = canvas.getContext('2d');
+      mosaicHistory.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+      if (mosaicHistory.length > 20) mosaicHistory.shift();
+      undoBtn.disabled = false;
+    }
+
+    function undoLastMosaic() {
+      if (!imageLoaded || mosaicHistory.length === 0) return;
+      const prev = mosaicHistory.pop();
+      const ctx = canvas.getContext('2d');
+      ctx.putImageData(prev, 0, 0);
+      currentImageData = prev;
+      if (mosaicHistory.length === 0) undoBtn.disabled = true;
+      // 检查是否还有马赛克
+      if (originalImageData) {
+        const current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let same = true;
+        const d1 = current.data, d2 = originalImageData.data;
+        for (let i = 0; i < d1.length && i < 1000; i++) {
+          if (d1[i] !== d2[i]) { same = false; break; }
+        }
+        if (same) {
+          isMosaicApplied = false;
+          clearMosaicBtn.disabled = true;
+          statusBadge.innerText = '⚪ 无马赛克';
+        } else {
+          isMosaicApplied = true;
+          clearMosaicBtn.disabled = false;
+          statusBadge.innerText = '✅ 已打马赛克';
+        }
+      }
+      updateUI();
+    }
+
+    function clearAllMosaics() {
+      if (!imageLoaded || !originalImageData) return;
+      const ctx = canvas.getContext('2d');
+      ctx.putImageData(originalImageData, 0, 0);
+      currentImageData = originalImageData;
+      mosaicHistory = [];
+      undoBtn.disabled = true;
+      isMosaicApplied = false;
+      clearMosaicBtn.disabled = true;
+      statusBadge.innerText = '⚪ 无马赛克';
+      updateUI();
+    }
+
+    function applyMosaicsToRegions(regions, blurSize) {
+      if (!imageLoaded || regions.length === 0) return;
+      const ctx = canvas.getContext('2d');
+      pushHistory();
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let r of regions) {
+        applyMosaicToImageData(imageData, r.x1, r.y1, r.x2, r.y2, blurSize);
+      }
+      ctx.putImageData(imageData, 0, 0);
+      currentImageData = imageData;
+      isMosaicApplied = true;
+      clearMosaicBtn.disabled = false;
+      statusBadge.innerText = `✅ 已对 ${regions.length} 个区域打码`;
+      updateUI();
+    }
+
+    // ---- 图像预处理：灰度化 + 自适应阈值 + 去噪 ----
+    function preprocessImageForOCR(sourceCanvas) {
+      const w = sourceCanvas.width;
+      const h = sourceCanvas.height;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = w;
+      tempCanvas.height = h;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      tempCtx.drawImage(sourceCanvas, 0, 0);
+      const imageData = tempCtx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const gray = new Uint8Array(w * h);
+
+      // 1. 简单灰度化（避免过度处理导致OCR失效）
+      for (let i = 0; i < w * h; i++) {
+        const idx = i * 4;
+        const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+        gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+      }
+
+      // 2. 全局对比度增强（直方图拉伸）
+      let minVal = 255, maxVal = 0;
+      for (let i = 0; i < w * h; i++) {
+        if (gray[i] < minVal) minVal = gray[i];
+        if (gray[i] > maxVal) maxVal = gray[i];
+      }
+      const range = maxVal - minVal;
+      if (range > 10) {
+        for (let i = 0; i < w * h; i++) {
+          gray[i] = ((gray[i] - minVal) / range) * 255;
+        }
+      }
+
+      // 3. 自适应阈值二值化（局部平均法）
+      const binary = new Uint8Array(w * h);
+      const windowSize = 15;
+      const halfWindow = Math.floor(windowSize / 2);
+      const C = 5;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          let sum = 0;
+          let count = 0;
+          for (let dy = -halfWindow; dy <= halfWindow; dy++) {
+            for (let dx = -halfWindow; dx <= halfWindow; dx++) {
+              const ny = y + dy;
+              const nx = x + dx;
+              if (ny >= 0 && ny < h && nx >= 0 && nx < w) {
+                sum += gray[ny * w + nx];
+                count++;
+              }
+            }
+          }
+          const mean = sum / count;
+          const idx = y * w + x;
+          // 蓝色文字反转（背景深，文字浅）时处理
+          binary[idx] = gray[idx] > (mean - C) ? 255 : 0;
+        }
+      }
+
+      // 4. 简单去噪：3x3 中值滤波
+      const denoised = new Uint8Array(w * h);
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const neighbors = [];
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              neighbors.push(binary[(y + dy) * w + (x + dx)]);
+            }
+          }
+          neighbors.sort((a, b) => a - b);
+          denoised[y * w + x] = neighbors[4];
+        }
+      }
+      // 边缘复制
+      for (let x = 0; x < w; x++) {
+        denoised[x] = binary[x];
+        denoised[(h - 1) * w + x] = binary[(h - 1) * w + x];
+      }
+      for (let y = 0; y < h; y++) {
+        denoised[y * w] = binary[y * w];
+        denoised[y * w + (w - 1)] = binary[y * w + (w - 1)];
+      }
+
+      // 5. 写回 canvas
+      for (let i = 0; i < w * h; i++) {
+        const idx = i * 4;
+        const val = denoised[i];
+        data[idx] = val;
+        data[idx + 1] = val;
+        data[idx + 2] = val;
+        data[idx + 3] = 255;
+      }
+      tempCtx.putImageData(imageData, 0, 0);
+
+      return tempCanvas.toDataURL();
+    }
+
+    // ---- OCR精确检测 ----
+    async function markKeywordsWithOCR(keywords) {
+      if (!imageLoaded || keywords.length === 0) return;
+
+      // 如果正在识别，取消上一次识别并等待其退出
+      if (isRecognizing) {
+        shouldCancelRecognition = true;
+        statusBadge.innerText = '⚠️ 取消上一次识别...';
+        // 等待上一次识别完全退出（最多等待2秒）
+        let waitCount = 0;
+        while (isRecognizing && waitCount < 20) {
+          await new Promise(r => setTimeout(r, 100));
+          waitCount++;
+        }
+        // 强制重置状态
+        if (isRecognizing) {
+          isRecognizing = false;
+          ocrProgress.classList.remove('active');
+        }
+      }
+
+      // 清除之前的标记
+      markedRegions = [];
+      drawMarkers(); // 立即清除画布上的标记
+      updateUI();
+      isRecognizing = true;
+      shouldCancelRecognition = false;
+
+      ocrProgress.classList.add('active');
+      ocrProgressFill.style.width = '0%';
+      ocrProgressText.textContent = '初始化 OCR 引擎...';
+      statusBadge.innerText = '🔮 正在识别文字...';
+
+      try {
+        // 创建 worker
+        if (!ocrWorker) {
+          const lang = ocrLangSelect.value;
+          ocrProgressText.textContent = '加载语言包...';
+          ocrWorker = await Tesseract.createWorker(lang, 1, {
+            logger: m => {
+              if (shouldCancelRecognition) return; // 取消时不更新进度
+              if (m.status === 'recognizing text') {
+                const pct = Math.round(m.progress * 100);
+                ocrProgressFill.style.width = pct + '%';
+                ocrProgressText.textContent = `识别中... ${pct}%`;
+              }
+            }
+          });
+          // 复用单worker时也用同样参数
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            textord_min_xheight: '8',
+            textord_heavy_nr_process: '1',
+          });
+        }
+        // 放大图片用于OCR（固定2倍）
+        const ocrCanvas = document.createElement('canvas');
+        const userScale = 2;
+        ocrCanvas.width = Math.round(canvas.width * userScale);
+        ocrCanvas.height = Math.round(canvas.height * userScale);
+        const ocrCtx = ocrCanvas.getContext('2d');
+        ocrCtx.imageSmoothingEnabled = false; // 保持清晰
+        ocrCtx.drawImage(canvas, 0, 0, ocrCanvas.width, ocrCanvas.height);
+
+        ocrProgressFill.style.width = '85%';
+        ocrProgressText.textContent = '分析文字...';
+
+        // ---- 分段OCR：长图切成多段，使用多个worker并发识别 ----
+        const allWords = [];
+        const allLines = [];
+        const segmentHeight = 800; // 每段高度
+        const overlap = 100;       // 重叠避免文字被切断
+        const totalHeight = ocrCanvas.height;
+        const isLongForOCR = totalHeight > 1000;
+        const segments = isLongForOCR ? Math.ceil((totalHeight - overlap) / (segmentHeight - overlap)) : 1;
+
+        if (isLongForOCR) {
+          statusBadge.innerText = `🔮 长图分段识别 (${segments}段并发)...`;
+        }
+
+        // 准备所有段的信息
+        const segmentInfos = [];
+        for (let seg = 0; seg < segments; seg++) {
+          const yStart = seg * (segmentHeight - overlap);
+          const yEnd = Math.min(yStart + segmentHeight, totalHeight);
+          const actualHeight = yEnd - yStart;
+          if (actualHeight < 50) continue;
+
+          const segCanvas = document.createElement('canvas');
+          segCanvas.width = ocrCanvas.width;
+          segCanvas.height = actualHeight;
+          const segCtx = segCanvas.getContext('2d');
+          segCtx.drawImage(ocrCanvas, 0, -yStart, ocrCanvas.width, ocrCanvas.height);
+          segmentInfos.push({ seg, yStart, dataUrl: segCanvas.toDataURL() });
+        }
+
+        if (segmentInfos.length <= 1) {
+          // 单段：使用主worker
+          if (shouldCancelRecognition) {
+            ocrProgress.classList.remove('active');
+            isRecognizing = false;
+            statusBadge.innerText = '⚠️ 识别已取消';
+            return;
+          }
+          const dataUrl = segmentInfos[0] ? segmentInfos[0].dataUrl : ocrCanvas.toDataURL();
+          const segResult = await ocrWorker.recognize(dataUrl);
+          if (shouldCancelRecognition) {
+            ocrProgress.classList.remove('active');
+            isRecognizing = false;
+            statusBadge.innerText = '⚠️ 识别已取消';
+            return;
+          }
+          const segData = segResult.data;
+          const yOff = segmentInfos[0] ? segmentInfos[0].yStart : 0;
+          if (segData.words) {
+            for (const word of segData.words) {
+              allWords.push({ text: word.text, bbox: { x0: word.bbox.x0, y0: word.bbox.y0 + yOff, x1: word.bbox.x1, y1: word.bbox.y1 + yOff } });
+            }
+          }
+          if (segData.lines) {
+            for (const line of segData.lines) {
+              allLines.push({ text: line.text, bbox: { x0: line.bbox.x0, y0: line.bbox.y0 + yOff, x1: line.bbox.x1, y1: line.bbox.y1 + yOff } });
+            }
+          }
+        } else {
+          // 多段：创建多个worker并发识别
+          const lang = ocrLangSelect.value;
+          const maxWorkers = Math.min(segmentInfos.length, navigator.hardwareConcurrency || 4);
+          const concurrency = Math.min(maxWorkers, 4); // 最多4个worker避免内存爆掉
+          const poolWorkers = [];
+          const workerBusy = [];
+
+          for (let i = 0; i < concurrency; i++) {
+            const w = await Tesseract.createWorker(lang, 1, {
+              logger: () => {} // 静默子worker的日志
+            });
+            await w.setParameters({
+              tessedit_pageseg_mode: '6',
+              preserve_interword_spaces: '1',
+              textord_min_xheight: '8',
+              textord_heavy_nr_process: '1',
+            });
+            poolWorkers.push(w);
+            workerBusy.push(false);
+          }
+
+          let completedCount = 0;
+          const results = new Array(segmentInfos.length).fill(null);
+
+          // 任务调度：找空闲worker执行
+          async function processSegment(idx) {
+            if (shouldCancelRecognition) return; // 取消检查
+            const wIdx = workerBusy.findIndex((b, i) => !b && i < poolWorkers.length);
+            if (wIdx === -1) {
+              // 等待任意一个worker空闲
+              await new Promise(r => setTimeout(r, 50));
+              return processSegment(idx);
+            }
+            workerBusy[wIdx] = true;
+            try {
+              if (shouldCancelRecognition) return; // 取消检查
+              const info = segmentInfos[idx];
+              const segResult = await poolWorkers[wIdx].recognize(info.dataUrl);
+              if (shouldCancelRecognition) return; // 取消检查
+              results[idx] = { data: segResult.data, yStart: info.yStart };
+            } finally {
+              workerBusy[wIdx] = false;
+            }
+            completedCount++;
+            const progress = Math.round((completedCount / segmentInfos.length) * 100);
+            ocrProgressFill.style.width = progress + '%';
+            ocrProgressText.textContent = `识别中... ${completedCount}/${segmentInfos.length}段`;
+          }
+
+          // 启动所有任务
+          const tasks = segmentInfos.map((_, idx) => processSegment(idx));
+          await Promise.all(tasks);
+
+          // 取消检查：合并结果前
+          if (shouldCancelRecognition) {
+            // 销毁临时worker池
+            for (const w of poolWorkers) {
+              await w.terminate();
+            }
+            ocrProgress.classList.remove('active');
+            isRecognizing = false;
+            statusBadge.innerText = '⚠️ 识别已取消';
+            return;
+          }
+
+          // 销毁临时worker池
+          for (const w of poolWorkers) {
+            await w.terminate();
+          }
+
+          // 按顺序合并结果
+          for (const r of results) {
+            if (!r) continue;
+            const yOff = r.yStart;
+            if (r.data.words) {
+              for (const word of r.data.words) {
+                allWords.push({ text: word.text, bbox: { x0: word.bbox.x0, y0: word.bbox.y0 + yOff, x1: word.bbox.x1, y1: word.bbox.y1 + yOff } });
+              }
+            }
+            if (r.data.lines) {
+              for (const line of r.data.lines) {
+                allLines.push({ text: line.text, bbox: { x0: line.bbox.x0, y0: line.bbox.y0 + yOff, x1: line.bbox.x1, y1: line.bbox.y1 + yOff } });
+              }
+            }
+          }
+        }
+
+        // 解析识别结果，匹配关键词
+        const keywordsLower = keywords.map(k => k.toLowerCase().trim());
+        const matchedRegions = [];
+        let allRecognizedText = '';
+
+        const textItems = [...allWords, ...allLines];
+
+        for (const item of textItems) {
+          const text = item.text.toLowerCase();
+          allRecognizedText += text + ' ';
+          const bbox = item.bbox;
+
+          // 精准的关键词匹配逻辑
+          const isMatch = keywordsLower.some(kw => {
+            if (!kw || kw.length < 1) return false;
+
+            // 货币符号匹配 - 扩展OCR容错匹配
+            if (kw === '$' || kw === 'usd') {
+              // USD 容错：USD, USO, US0, U5D, U$D, US$, USC, USO, US9, U$D 等
+              return /\$/.test(text) || /\busd\b/i.test(text) || 
+                     /\bu[\$5s0o9]d\b/i.test(text) ||    // u5d, us0, uso 等
+                     /\bus[\$5s0o9]\b/i.test(text);      // us$, us0, uso 等
+            }
+
+            if (kw === 'eur' || kw === '€') {
+              return /€/.test(text) || /\beur\b/i.test(text) || /\be[u]r\b/i.test(text);
+            }
+
+            if (kw === 'cny' || kw === '¥') {
+              return /¥/.test(text) || /\bcny\b/i.test(text);
+            }
+
+            // @ 邮箱匹配 - 严格规则：必须包含@符号
+            if (kw === '@') {
+              return /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,6}/i.test(text);
+            }
+
+            // 域名后缀匹配 - 必须是完整的域名格式
+            if (kw.startsWith('.')) {
+              const ext = kw.slice(1);
+              // 必须有字母前缀，不能只是数字
+              return /[a-z][a-z0-9._%+-]*\.${ext}/i.test(text);
+            }
+
+            // URL匹配
+            if (kw.includes('http') || kw === 'www') {
+              return /https?:\/\//i.test(text) || /\bwww\.[a-z0-9.-]+\.[a-z]{2,}/i.test(text);
+            }
+
+            // 价格单位匹配 - 必须有货币符号
+            if (['per', 'kilo'].includes(kw)) {
+              // 必须有货币符号 + 数字 + 单位
+              const hasCurrency = /[$€¥£]|\busd\b|\beur\b|\bcny\b/i.test(text);
+              const hasNumber = /\d/.test(text);
+              const hasUnit = /\b(per|kilo)\b/i.test(text);
+              return hasCurrency && hasNumber && hasUnit;
+            }
+
+            // 重量单位 - 不应该被标记（排除）
+            if (['kg', 'lb', 'pcs', 'ctns', 'carton', 'pallet'].includes(kw)) {
+              return false; // 纯重量/数量格式不应该标记
+            }
+
+            // 金额相关词汇匹配 - 必须有货币符号
+            if (['price', 'cost', 'rate', 'fee', 'amount', 'total', 'subtotal'].includes(kw)) {
+              const hasCurrency = /[$€¥£]|\busd\b|\beur\b|\bcny\b/i.test(text);
+              const hasKeyword = new RegExp('\\b' + kw + '\\b', 'i').test(text);
+              return hasKeyword && hasCurrency;
+            }
+
+            // email/mail词汇 - 必须有@符号
+            if (kw === 'email' || kw === 'mail') {
+              return /@/.test(text);
+            }
+
+            // 其他关键词：必须精确匹配，不能只是包含
+            const kwRegex = new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+            return kwRegex.test(text);
+          });
+
+          // 排除格式：
+          // 1. 提单号格式（如 045-13189164, ABC1234567）
+          const isBillOfLading = /^\d{3}-\d{8}$/.test(text.trim()) || /^[A-Z]{2,3}\d{7,10}$/i.test(text.trim());
+          // 2. 纯重量格式（如 300kg, 150lb）
+          const isPureWeight = /^\d+\s*(kg|lb|kilo|pound|lbs|pcs|ctns|cartons?)s?$/i.test(text.trim());
+          // 3. 电话号码格式
+          const isPhoneNumber = /^\d{2,4}[-\s]\d{3,4}[-\s]\d{3,4}$/.test(text.trim()) || 
+                                /^\d{3}[-\s]\d{4}[-\s]\d{4}$/.test(text.trim()) ||
+                                /^\+\d{1,3}[-\s]\d{3,4}[-\s]\d{3,4}$/.test(text.trim());
+          // 4. 日期时间格式
+          const isDateTime = /^\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}/.test(text.trim()) ||  // 2024-01-15, 01/15/2024
+                             /^\d{1,2}:\d{2}(:\d{2})?/.test(text.trim()) ||            // 10:30, 10:30:00
+                             /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(text.trim()) && /\d/.test(text); // Jan 15
+          // 5. 纯数字格式（只有数字，没有其他字符）
+          const isPureNumber = /^\d+$/.test(text.trim());
+          // 4. 纯地名
+          const isLocation = /^(latam|mia|lax|jfk|mex|cargo)$/i.test(text.trim());
+          // 5. 白名单检查 - 改进匹配逻辑
+          const whitelist = loadWhitelist();
+          // 白名单内容可能被拆分成多个words，需要更灵活的匹配
+          let matchedWhitelistItem = null;
+          const isWhitelisted = whitelist.some(w => {
+            const wLower = w.toLowerCase();
+            // 直接包含匹配
+            if (text.includes(wLower)) {
+              matchedWhitelistItem = w;
+              return true;
+            }
+            // 白名单内容拆分后匹配（处理OCR拆分情况）
+            const wParts = wLower.split(/[\s\-\.]+/);
+            if (wParts.length > 1) {
+              // 检查是否所有部分都在当前文本或相邻文本中
+              const matched = wParts.some(part => part.length > 2 && text.includes(part));
+              if (matched) matchedWhitelistItem = w;
+              return matched;
+            }
+            return false;
+          });
+          if (isWhitelisted) {
+            console.log('🟢 白名单匹配:', text.trim(), '->', matchedWhitelistItem);
+          }
+          // 6. 黑名单检查 - 匹配黑名单的内容强制标记（优先于白名单）
+          const blacklist = loadBlacklist();
+          let matchedBlacklistItem = null;
+          const isBlacklisted = blacklist.some(w => {
+            const wLower = w.toLowerCase();
+            if (text.includes(wLower)) {
+              matchedBlacklistItem = w;
+              return true;
+            }
+            const wParts = wLower.split(/[\s\-\.]+/);
+            if (wParts.length > 1) {
+              const matched = wParts.some(part => part.length > 2 && text.includes(part));
+              if (matched) matchedBlacklistItem = w;
+              return matched;
+            }
+            return false;
+          });
+          if (isBlacklisted) {
+            console.log('🔴 黑名单匹配:', text.trim(), '->', matchedBlacklistItem);
+          }
+          // 7. 学习到的格式特征排除
+          let isLearnedPatternMatched = false;
+          if (typeof window.matchesLearnedPattern === 'function') {
+            const patternMatch = window.matchesLearnedPattern(text.trim());
+            if (patternMatch.matched) {
+              isLearnedPatternMatched = true;
+              console.log('🔇 匹配学习到的排除格式:', text.trim(), patternMatch.pattern.desc);
+            }
+          }
+
+          if ((isMatch || isBlacklisted) && !isBillOfLading && !isPureWeight && !isPhoneNumber && !isDateTime && !isPureNumber && !isLocation && !isWhitelisted && !isLearnedPatternMatched) {
+            // 坐标需要缩放回原图
+            matchedRegions.push({
+              x1: Math.round(bbox.x0 / userScale),
+              y1: Math.round(bbox.y0 / userScale),
+              x2: Math.round(bbox.x1 / userScale),
+              y2: Math.round(bbox.y1 / userScale)
+            });
+          }
+        }
+
+        console.log('OCR识别到的文字:', allRecognizedText.substring(0, 500));
+
+        // 同时检查整行是否包含关键词
+        if (allLines.length > 0) {
+          for (const line of allLines) {
+            const lineText = line.text.toLowerCase();
+            const lineBbox = line.bbox;
+
+            // 排除格式：
+            const isBillOfLadingLine = /^\d{3}-\d{8}$/.test(lineText.trim()) || /^[A-Z]{2,3}\d{7,10}$/i.test(lineText.trim());
+            const isPureWeightLine = /^\d+\s*(kg|lb|kilo|pound|lbs|pcs|ctns|cartons?)s?$/i.test(lineText.trim());
+            const isPhoneNumberLine = /^\d{2,4}[-\s]\d{3,4}[-\s]\d{3,4}$/.test(lineText.trim()) || 
+                                      /^\d{3}[-\s]\d{4}[-\s]\d{4}$/.test(lineText.trim()) ||
+                                      /^\+\d{1,3}[-\s]\d{3,4}[-\s]\d{3,4}$/.test(lineText.trim());
+            // 日期时间格式排除
+            const isDateTimeLine = /^\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}/.test(lineText.trim()) ||  // 2024-01-15
+                                   /^\d{1,2}:\d{2}(:\d{2})?/.test(lineText.trim()) ||            // 10:30
+                                   /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(lineText.trim()) && /\d/.test(lineText);
+            // 纯数字格式排除
+            const isPureNumberLine = /^\d+$/.test(lineText.trim());
+            // 白名单检查 - 改进匹配逻辑
+            const whitelistLine = loadWhitelist();
+            let matchedWhitelistItemLine = null;
+            const isWhitelistedLine = whitelistLine.some(w => {
+              const wLower = w.toLowerCase();
+              // 直接包含匹配
+              if (lineText.includes(wLower)) {
+                matchedWhitelistItemLine = w;
+                return true;
+              }
+              // 白名单内容拆分后匹配
+              const wParts = wLower.split(/[\s\-\.]+/);
+              if (wParts.length > 1) {
+                const matched = wParts.some(part => part.length > 2 && lineText.includes(part));
+                if (matched) matchedWhitelistItemLine = w;
+                return matched;
+              }
+              return false;
+            });
+            if (isWhitelistedLine) {
+              console.log('🟢 行白名单匹配:', lineText.trim(), '->', matchedWhitelistItemLine);
+            }
+            // 黑名单检查
+            const blacklistLine = loadBlacklist();
+            let matchedBlacklistItemLine = null;
+            const isBlacklistedLine = blacklistLine.some(w => {
+              const wLower = w.toLowerCase();
+              if (lineText.includes(wLower)) {
+                matchedBlacklistItemLine = w;
+                return true;
+              }
+              const wParts = wLower.split(/[\s\-\.]+/);
+              if (wParts.length > 1) {
+                const matched = wParts.some(part => part.length > 2 && lineText.includes(part));
+                if (matched) matchedBlacklistItemLine = w;
+                return matched;
+              }
+              return false;
+            });
+            if (isBlacklistedLine) {
+              console.log('🔴 行黑名单匹配:', lineText.trim(), '->', matchedBlacklistItemLine);
+            }
+            // 学习到的格式特征排除
+            let isLearnedPatternMatchedLine = false;
+            if (typeof window.matchesLearnedPattern === 'function') {
+              const patternMatch = window.matchesLearnedPattern(lineText.trim());
+              if (patternMatch.matched) {
+                isLearnedPatternMatchedLine = true;
+                console.log('🔇 行匹配学习到的排除格式:', lineText.trim(), patternMatch.pattern.desc);
+              }
+            }
+            if (isBillOfLadingLine || isPureWeightLine || isPhoneNumberLine || isDateTimeLine || isPureNumberLine || isWhitelistedLine || isLearnedPatternMatchedLine) continue;
+
+            const matchedKW = keywordsLower.find(kw => {
+              if (!kw || kw.length < 1) return false;
+
+              // 货币符号匹配 - 扩展OCR容错匹配
+              if (kw === '$' || kw === 'usd') {
+                return /\$/.test(lineText) || /\busd\b/i.test(lineText) || 
+                       /\bu[\$5s0o9]d\b/i.test(lineText) ||
+                       /\bus[\$5s0o9]\b/i.test(lineText);
+              }
+
+              // 邮箱匹配 - 必须有@符号
+              if (kw === '@') {
+                return /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,4}/i.test(lineText);
+              }
+
+              // 域名后缀匹配
+              if (kw.startsWith('.')) {
+                const ext = kw.slice(1);
+                return /[a-z][a-z0-9._%+-]*\.${ext}/i.test(lineText);
+              }
+
+              if (kw.includes('http')) return /https?:\/\//i.test(lineText);
+
+              // per/kilo价格：必须有货币符号
+              if (kw === 'per' || kw === 'kilo') {
+                const hasCurrency = /[$€¥£]|\busd\b|\beur\b|\bcny\b/i.test(lineText);
+                const hasNumber = /\d/.test(lineText);
+                const hasUnit = /\b(per|kilo)\b/i.test(lineText);
+                return hasCurrency && hasNumber && hasUnit;
+              }
+
+              // 重量单位 - 不标记
+              if (['kg', 'lb', 'pcs', 'ctns', 'carton', 'pallet'].includes(kw)) {
+                return false;
+              }
+
+              // email/mail - 必须有@符号
+              if (kw === 'email' || kw === 'mail') {
+                return /@/.test(lineText);
+              }
+
+              // 其他关键词：精确匹配
+              const kwRegex = new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+              return kwRegex.test(lineText);
+            });
+            if (matchedKW || isBlacklistedLine) {
+              // 计算精确的关键词位置，只标记关键词前后3-5个字符
+              const lineWidth = lineBbox.x1 - lineBbox.x0;
+              const charWidth = lineWidth / line.text.length;
+              
+              // 货币类关键词需要前后扩展更多字符以包含数字
+              const isCurrencyKW = matchedKW && ['$', 'usd', 'eur', '€', 'cny', '¥', '£'].includes(matchedKW.toLowerCase());
+              const isAmountWordKW = matchedKW && ['per', 'kilo', 'price', 'cost', 'rate', 'fee', 'amount', 'total'].includes(matchedKW.toLowerCase());
+              
+              // 货币关键字扩展10个字符，普通关键字扩展4个字符
+              const extendChars = isCurrencyKW || isAmountWordKW ? 10 : 4;
+              const extendPx = Math.round(charWidth * extendChars);
+
+              // 查找关键词在文本中的位置
+              let kwStart, kwEnd;
+              if (isBlacklistedLine) {
+                // 黑名单匹配，标记整行
+                kwStart = lineBbox.x0;
+                kwEnd = lineBbox.x1;
+              } else {
+                const kwLower = matchedKW.toLowerCase();
+                const kwPos = lineText.indexOf(kwLower);
+                if (kwPos >= 0) {
+                  // 关键词位置
+                  kwStart = lineBbox.x0 + Math.round(kwPos * charWidth);
+                  kwEnd = lineBbox.x0 + Math.round((kwPos + kwLower.length) * charWidth);
+                } else {
+                  // 如果找不到关键词位置（可能是正则匹配），使用整行
+                  kwStart = lineBbox.x0;
+                  kwEnd = lineBbox.x1;
+                }
+              }
+
+              // 扩展区域
+              matchedRegions.push({
+                x1: Math.max(0, Math.round((kwStart - extendPx) / userScale)),
+                y1: Math.max(0, Math.round((lineBbox.y0 - 2) / userScale)),
+                x2: Math.round((kwEnd + extendPx) / userScale),
+                y2: Math.round((lineBbox.y1 + 2) / userScale)
+              });
+            }
+          }
+        }
+
+        // 合并相邻的匹配区域
+        const mergedRegions = [];
+        const gapThreshold = 20; // 固定值：相邻区域合并阈值
+
+        for (const region of matchedRegions) {
+          let found = false;
+          for (const existing of mergedRegions) {
+            if (region.x1 <= existing.x2 + gapThreshold &&
+                region.x2 >= existing.x1 - gapThreshold &&
+                region.y1 <= existing.y2 + gapThreshold &&
+                region.y2 >= existing.y1 - gapThreshold) {
+              existing.x1 = Math.min(existing.x1, region.x1);
+              existing.y1 = Math.min(existing.y1, region.y1);
+              existing.x2 = Math.max(existing.x2, region.x2);
+              existing.y2 = Math.max(existing.y2, region.y2);
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            mergedRegions.push({ ...region });
+          }
+        }
+
+        // 扩展区域边界
+        const expandPx = 5; // 固定值：边界扩展像素
+        markedRegions = mergedRegions.map(r => ({
+          x1: Math.max(0, r.x1 - expandPx),
+          y1: Math.max(0, r.y1 - expandPx),
+          x2: Math.min(canvas.width, r.x2 + expandPx),
+          y2: Math.min(canvas.height, r.y2 + expandPx)
+        }));
+
+        ocrProgress.classList.remove('active');
+        isRecognizing = false;
+
+        if (shouldCancelRecognition) {
+          statusBadge.innerText = '⚠️ 识别已取消';
+          return;
+        }
+
+        if (markedRegions.length === 0) {
+          statusBadge.innerText = '⚠️ 未匹配到关键词，请尝试调整关键词';
+        } else {
+          statusBadge.innerText = `🔮 OCR识别到 ${matchedRegions.length} 处匹配 (${markedRegions.length} 个区域)`;
+        }
+        drawMarkers();
+        updateUI();
+
+      } catch (err) {
+        console.error('OCR Error:', err);
+        ocrProgress.classList.remove('active');
+        isRecognizing = false;
+        if (shouldCancelRecognition) {
+          statusBadge.innerText = '⚠️ 识别已取消';
+          return;
+        }
+        statusBadge.innerText = '❌ OCR识别失败，切换到快速检测';
+        markKeywords(keywords);
+      }
+    }
+
+    // ---- 关键词标记（基于像素文字检测） ----
+    function markKeywords(keywords) {
+      if (!imageLoaded || keywords.length === 0) return;
+
+      // 清除之前的标记
+      markedRegions = [];
+      drawMarkers();
+      updateUI();
+
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+
+      // 转为灰度图并二值化，检测文字区域
+      // 使用简单边缘检测 + 连通区域分析
+      const gray = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        const idx = i * 4;
+        gray[i] = 0.299 * data[idx] + 0.587 * data[idx+1] + 0.114 * data[idx+2];
+      }
+
+      // 计算局部对比度，找到文字区域
+      // 判断是否为长图（截图常见）
+      const isLongImage = h > w * 1.5;
+      const scaleFactor = Math.min(w, h) / 400; // 相对缩放因子
+
+      // 长图或缩放过小的图需要更敏感的检测
+      const threshold = isLongImage || scaleFactor < 0.8 ? 22 : 32;
+      const binary = new Uint8Array(w * h);
+      for (let y = 1; y < h-1; y++) {
+        for (let x = 1; x < w-1; x++) {
+          const idx = y * w + x;
+          const center = gray[idx];
+          let maxDiff = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const diff = Math.abs(center - gray[(y+dy) * w + (x+dx)]);
+              if (diff > maxDiff) maxDiff = diff;
+            }
+          }
+          binary[idx] = maxDiff > threshold ? 255 : 0;
+        }
+      }
+
+      // 判断关键词类型，调整检测策略
+      const hasEmail = keywords.some(k => k.includes('@') || k.includes('.com') || k.includes('mail'));
+      const hasMoney = keywords.some(k => k.includes('$') || k.includes('USD') || k.includes('¥') || k.includes('€') || /\d+/.test(k) || k.includes('金额') || k.includes('价格'));
+      const hasUrl = keywords.some(k => k.includes('.com') || k.includes('http') || k.includes('www'));
+
+      // 根据关键词类型调整参数
+      // 邮箱/URL类关键词：通常文字较小、密集、排列整齐
+      // 金额类关键词：可能出现在表格或单行，背景可能不同
+      let windowSize = 24;
+      let step = 6;
+      let densityThreshold = 0.2;
+      let minHeight = 8;
+      let maxHeightRatio = 0.5;
+
+      if (isLongImage) {
+        // 长图：文字通常被压缩得更小，需要更精细的检测
+        windowSize = Math.max(12, Math.round(16 * scaleFactor));
+        step = Math.max(3, Math.round(4 * scaleFactor));
+        densityThreshold = 0.12;
+        minHeight = 4;
+      }
+      if (hasEmail || hasUrl) {
+        // 邮箱/URL：检测较小较密的文字
+        windowSize = isLongImage ? Math.max(10, Math.round(14 * scaleFactor)) : 18;
+        step = isLongImage ? Math.max(2, Math.round(3 * scaleFactor)) : 4;
+        densityThreshold = isLongImage ? 0.1 : 0.25;
+        minHeight = isLongImage ? 4 : 6;
+      }
+      if (hasMoney) {
+        // 金额：可能水平排列，检测中等高度区域
+        windowSize = isLongImage ? Math.max(16, Math.round(22 * scaleFactor)) : 30;
+        step = isLongImage ? Math.max(4, Math.round(6 * scaleFactor)) : 8;
+        densityThreshold = isLongImage ? 0.08 : 0.15;
+        minHeight = isLongImage ? 6 : 10;
+      }
+
+      // 寻找连通区域（简化：滑动窗口检测密集文字区域）
+      const regions = [];
+      const minArea = 40;
+
+      for (let y = 0; y < h - windowSize; y += step) {
+        for (let x = 0; x < w - windowSize; x += step) {
+          let count = 0;
+          for (let dy = 0; dy < windowSize; dy++) {
+            for (let dx = 0; dx < windowSize; dx++) {
+              if (binary[(y+dy) * w + (x+dx)] === 255) count++;
+            }
+          }
+          const density = count / (windowSize * windowSize);
+          if (density > densityThreshold) {
+            // 检测到文字密集区域
+            // 合并重叠区域
+            let merged = false;
+            for (let r of regions) {
+              const gap = 6;
+              if (x < r.x2 + gap && x + windowSize + gap > r.x1 &&
+                  y < r.y2 + gap && y + windowSize + gap > r.y1) {
+                r.x1 = Math.min(r.x1, x);
+                r.y1 = Math.min(r.y1, y);
+                r.x2 = Math.max(r.x2, x + windowSize);
+                r.y2 = Math.max(r.y2, y + windowSize);
+                merged = true;
+                break;
+              }
+            }
+            if (!merged) {
+              regions.push({ x1: x, y1: y, x2: x + windowSize, y2: y + windowSize });
+            }
+          }
+        }
+      }
+
+      // 过滤掉太小的区域
+      let filtered = regions.filter(r => (r.x2 - r.x1) * (r.y2 - r.y1) > minArea);
+
+      // 根据关键词类型进一步筛选
+      if (hasEmail || hasUrl) {
+        // 邮箱/URL：倾向于窄高的区域（单行文字）
+        filtered = filtered.filter(r => {
+          const width = r.x2 - r.x1;
+          const height = r.y2 - r.y1;
+          const aspectRatio = width / height;
+          return aspectRatio > 1.5 && height < h * 0.1;
+        });
+      }
+      if (hasMoney) {
+        // 金额：倾向于中等高度、水平方向延伸的区域
+        filtered = filtered.filter(r => {
+          const width = r.x2 - r.x1;
+          const height = r.y2 - r.y1;
+          return height >= minHeight && height < h * 0.15 && width > height * 2;
+        });
+      }
+
+      // 对所有检测到的区域扩展边界
+      const expanded = filtered.map(r => ({
+        x1: Math.max(0, r.x1 - 6),
+        y1: Math.max(0, r.y1 - 4),
+        x2: Math.min(w, r.x2 + 6),
+        y2: Math.min(h, r.y2 + 4)
+      }));
+
+      // 保存标记
+      markedRegions = expanded;
+
+      // 如果没有检测到任何区域，使用fallback：检测水平线条（可能是金额行）
+      if (markedRegions.length === 0) {
+        // 尝试检测水平文字行
+        const hWindow = 12;
+        for (let y = hWindow; y < h - hWindow; y += 10) {
+          let count = 0;
+          for (let x = 0; x < w; x++) {
+            if (binary[y * w + x] === 255) count++;
+          }
+          const density = count / w;
+          if (density > 0.05) {
+            markedRegions.push({ x1: 0, y1: y - hWindow/2, x2: w, y2: y + hWindow/2 });
+          }
+        }
+        if (markedRegions.length === 0) {
+          // 整张图片作为候选
+          markedRegions = [{ x1: 0, y1: 0, x2: w, y2: h }];
+        }
+      }
+
+      // 绘制标记
+      drawMarkers();
+      statusBadge.innerText = `📍 已标记 ${markedRegions.length} 个区域 (${hasEmail ? '邮箱' : ''}${hasMoney ? '金额' : '文字'})`;
+      updateUI();
+    }
+
+    function drawMarkers() {
+      if (!imageLoaded) return;
+      const ctx = canvas.getContext('2d');
+      // 重新绘制原始图像
+      if (currentImageData) {
+        ctx.putImageData(currentImageData, 0, 0);
+      } else if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        currentImageData = originalImageData;
+      }
+
+      // 绘制标记
+      for (let r of markedRegions) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.25)';
+        ctx.fillRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
+        ctx.strokeStyle = '#ff6b00';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
+        ctx.restore();
+      }
+    }
+
+    function clearMarkers() {
+      markedRegions = [];
+      // 恢复到当前图像数据
+      const ctx = canvas.getContext('2d');
+      if (currentImageData) {
+        ctx.putImageData(currentImageData, 0, 0);
+      } else if (originalImageData) {
+        ctx.putImageData(originalImageData, 0, 0);
+        currentImageData = originalImageData;
+      }
+      statusBadge.innerText = '⚪ 已清除标记';
+      updateUI();
+    }
+
+    // ---- Canvas 手动拖拽 ----
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      let clientX, clientY;
+      if (e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+        e.preventDefault();
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      let x = (clientX - rect.left) * scaleX;
+      let y = (clientY - rect.top) * scaleY;
+      x = Math.min(Math.max(x, 0), canvas.width);
+      y = Math.min(Math.max(y, 0), canvas.height);
+      return { x, y };
+    }
+
+    function redrawCanvas() {
+      if (!imageLoaded) return;
+      const ctx = canvas.getContext('2d');
+      if (currentImageData) ctx.putImageData(currentImageData, 0, 0);
+      else if (originalImageData) { ctx.putImageData(originalImageData, 0, 0);
+        currentImageData = originalImageData; }
+      // 如果有标记，重新绘制标记
+      if (markedRegions.length > 0) {
+        drawMarkers();
+      }
+    }
+
+    function drawSelectionRect(x1, y1, x2, y2) {
+      if (!imageLoaded) return;
+      const ctx = canvas.getContext('2d');
+      redrawCanvas();
+      const left = Math.min(x1, x2), right = Math.max(x1, x2);
+      const top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 20, 50, 0.15)';
+      ctx.fillRect(left, top, right-left, bottom-top);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.strokeRect(left, top, right-left, bottom-top);
+      ctx.restore();
+    }
+
+    function onPointerDown(e) {
+      if (!imageLoaded) return;
+      e.preventDefault();
+      const coords = getCanvasCoords(e);
+      startX = coords.x; startY = coords.y;
+      isDrawing = true;
+      endX = startX; endY = startY;
+      canvas.style.cursor = 'grabbing';
+    }
+
+    function onPointerMove(e) {
+      if (!imageLoaded || !isDrawing) return;
+      e.preventDefault();
+      const coords = getCanvasCoords(e);
+      endX = coords.x; endY = coords.y;
+      drawSelectionRect(startX, startY, endX, endY);
+    }
+
+    function onPointerUp(e) {
+      if (!imageLoaded || !isDrawing) { canvas.style.cursor = 'crosshair'; return; }
+      e.preventDefault();
+      isDrawing = false;
+      canvas.style.cursor = 'crosshair';
+
+      const minSize = 10;
+      const clickWidth = Math.abs(endX - startX);
+      const clickHeight = Math.abs(endY - startY);
+
+      // 删除模式：点击已有标记删除
+      if (isDeleteMode) {
+        if (clickWidth < minSize && clickHeight < minSize) {
+          const clickX = Math.min(startX, endX);
+          const clickY = Math.min(startY, endY);
+          const idx = markedRegions.findIndex(r =>
+            clickX >= r.x1 && clickX <= r.x2 && clickY >= r.y1 && clickY <= r.y2
+          );
+          if (idx !== -1) {
+            markedRegions.splice(idx, 1);
+            drawMarkers();
+            statusBadge.innerText = `🗑️ 已删除标记 (${markedRegions.length} 个)`;
+            updateUI();
+          } else {
+            statusBadge.innerText = '⚠️ 未点击到标记区域';
+          }
+        } else {
+          statusBadge.innerText = '⚠️ 删除模式：点击标记区域即可删除';
+        }
+        return;
+      }
+
+      // 白名单模式：手动框选区域，加入白名单
+      if (isWhitelistMode) {
+        const minDrawSize = 5;
+        if (clickWidth < minDrawSize || clickHeight < minDrawSize) {
+          statusBadge.innerText = '⚠️ 区域太小';
+          redrawCanvas();
+          return;
+        }
+        const left = Math.min(startX, endX), right = Math.max(startX, endX);
+        const top = Math.min(startY, endY), bottom = Math.max(startY, endY);
+        // 直接提取文字加入白名单，不保存为标记
+        extractTextToWhitelist(left, top, right, bottom).then(text => {
+          if (text) {
+            statusBadge.innerText = `➕ 已加入白名单: "${text}"`;
+          } else {
+            statusBadge.innerText = '⚠️ 未识别到文字';
+          }
+        });
+        return;
+      }
+
+      // 黑名单模式：手动框选区域，加入黑名单
+      if (isBlacklistMode) {
+        const minDrawSize = 5;
+        if (clickWidth < minDrawSize || clickHeight < minDrawSize) {
+          statusBadge.innerText = '⚠️ 区域太小';
+          redrawCanvas();
+          return;
+        }
+        const left = Math.min(startX, endX), right = Math.max(startX, endX);
+        const top = Math.min(startY, endY), bottom = Math.max(startY, endY);
+        // 直接提取文字加入黑名单，不保存为标记
+        extractTextToBlacklist(left, top, right, bottom).then(text => {
+          if (text) {
+            statusBadge.innerText = `🚫 已加入黑名单: "${text}"`;
+          } else {
+            statusBadge.innerText = '⚠️ 未识别到文字';
+          }
+        });
+        return;
+      }
+
+      // 正常模式：添加新标记区域（不自动学习）
+      const minDrawSize = 5;
+      if (clickWidth < minDrawSize || clickHeight < minDrawSize) {
+        statusBadge.innerText = '⚠️ 区域太小';
+        redrawCanvas();
+        return;
+      }
+
+      const left = Math.min(startX, endX), right = Math.max(startX, endX);
+      const top = Math.min(startY, endY), bottom = Math.max(startY, endY);
+      markedRegions.push({ x1: left, y1: top, x2: right, y2: bottom });
+      drawMarkers();
+      statusBadge.innerText = `📍 已添加手动标记 (${markedRegions.length} 个)`;
+      updateUI();
+    }
+
+    // ---- 白名单提取功能 ----
+    async function extractTextToWhitelist(x1, y1, x2, y2) {
+      if (!ocrWorker) {
+        try {
+          const lang = ocrLangSelect.value;
+          ocrWorker = await Tesseract.createWorker(lang, 1, { logger: () => {} });
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            textord_min_xheight: '8',
+          });
+        } catch (e) {
+          console.log('OCR初始化失败:', e);
+          return null;
+        }
+      }
+
+      try {
+        const userScale = 2;
+        const regionCanvas = document.createElement('canvas');
+        regionCanvas.width = Math.round((x2 - x1) * userScale);
+        regionCanvas.height = Math.round((y2 - y1) * userScale);
+        const ctx = regionCanvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas, x1, y1, x2 - x1, y2 - y1, 0, 0, regionCanvas.width, regionCanvas.height);
+
+        const result = await ocrWorker.recognize(regionCanvas.toDataURL());
+        const text = (result.data.text || '').trim();
+        if (text) {
+          // 保存到白名单
+          saveWhitelist(text);
+          // 同时学习格式特征（白名单格式下次应该排除）
+          if (typeof window.extractPatterns === 'function') {
+            const patterns = window.extractPatterns(text);
+            if (patterns.length > 0) {
+              if (typeof window.saveLearnedPatterns === 'function') {
+                window.saveLearnedPatterns(patterns);
+              }
+              console.log('🧠 白名单格式特征已学习:', patterns.map(p => p.desc).join(', '));
+            }
+          }
+          return text;
+        }
+      } catch (e) {
+        console.log('白名单提取失败:', e);
+      }
+      return null;
+    }
+
+    // ---- 黑名单提取功能 ----
+    async function extractTextToBlacklist(x1, y1, x2, y2) {
+      if (!ocrWorker) {
+        try {
+          const lang = ocrLangSelect.value;
+          ocrWorker = await Tesseract.createWorker(lang, 1, { logger: () => {} });
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            textord_min_xheight: '8',
+          });
+        } catch (e) {
+          console.log('OCR初始化失败:', e);
+          return null;
+        }
+      }
+
+      try {
+        const userScale = 2;
+        const regionCanvas = document.createElement('canvas');
+        regionCanvas.width = Math.round((x2 - x1) * userScale);
+        regionCanvas.height = Math.round((y2 - y1) * userScale);
+        const ctx = regionCanvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas, x1, y1, x2 - x1, y2 - y1, 0, 0, regionCanvas.width, regionCanvas.height);
+
+        const result = await ocrWorker.recognize(regionCanvas.toDataURL());
+        const text = (result.data.text || '').trim();
+        if (text) {
+          // 保存到黑名单
+          if (typeof window.saveBlacklistData === 'function') {
+            window.saveBlacklistData(text);
+          }
+          // 学习格式特征（黑名单格式下次应该排除）
+          if (typeof window.extractPatterns === 'function') {
+            const patterns = window.extractPatterns(text);
+            if (patterns.length > 0) {
+              if (typeof window.saveLearnedPatterns === 'function') {
+                window.saveLearnedPatterns(patterns);
+              }
+              console.log('🧠 黑名单格式特征已学习:', patterns.map(p => p.desc).join(', '));
+              return `${text} (${patterns.map(p => p.desc).join(', ')})`;
+            }
+          }
+          return text;
+        }
+      } catch (e) {
+        console.log('黑名单提取失败:', e);
+      }
+      return null;
+    }
+
+    // ---- 学习功能：从手动标记区域提取特征 ----
+    async function learnFromManualMarker(x1, y1, x2, y2) {
+      // 如果OCR未启用，先初始化
+      if (!ocrWorker) {
+        try {
+          statusBadge.innerText = '🔮 初始化OCR...';
+          const lang = ocrLangSelect.value;
+          ocrWorker = await Tesseract.createWorker(lang, 1, { logger: () => {} });
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: '6',
+            preserve_interword_spaces: '1',
+            textord_min_xheight: '8',
+          });
+          ocrModeEnabled = true;
+          ocrModeCheckbox.checked = true;
+          ocrToggle.classList.add('active');
+        } catch (e) {
+          console.log('OCR初始化失败:', e);
+          return null;
+        }
+      }
+
+      try {
+        const userScale = 2;
+        const regionCanvas = document.createElement('canvas');
+        regionCanvas.width = Math.round((x2 - x1) * userScale);
+        regionCanvas.height = Math.round((y2 - y1) * userScale);
+        const ctx = regionCanvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(canvas, x1, y1, x2 - x1, y2 - y1, 0, 0, regionCanvas.width, regionCanvas.height);
+
+        const result = await ocrWorker.recognize(regionCanvas.toDataURL());
+        const text = result.data.text || '';
+        if (!text.trim()) return null;
+
+        const features = [];
+        const lowerText = text.toLowerCase();
+
+        // 提取域名后缀
+        const domainMatches = lowerText.match(/\.[a-z]{2,6}/g);
+        if (domainMatches) {
+          for (const domain of domainMatches) {
+            if (!features.includes(domain) && domain.length >= 3) {
+              features.push(domain);
+            }
+          }
+        }
+
+        // 提取货币关键词
+        const currencyMatches = lowerText.match(/\b(usd|eur|cny|jpy|gbp|aud|cad|chf|sek|nok|dollar|euro|yen|pound)\b/g);
+        if (currencyMatches) {
+          for (const curr of currencyMatches) {
+            if (!features.includes(curr)) features.push(curr);
+          }
+        }
+
+        // 提取邮箱符号
+        const emailMatches = lowerText.match(/[a-z0-9._%+-]+@/g);
+        if (emailMatches) {
+          features.push('@');
+        }
+
+        // 提取包含数字的商务词汇
+        const businessWords = ['per', 'kilo', 'kg', 'lb', 'pcs', 'ctns', 'carton', 'pallet', 'container', 'price', 'cost', 'rate', 'fee', 'amount', 'total'];
+        for (const word of businessWords) {
+          if (lowerText.includes(word) && !features.includes(word)) {
+            features.push(word);
+          }
+        }
+
+        // 保存到localStorage
+        for (const feature of features) {
+          saveLearnedKeyword(feature);
+        }
+
+        console.log('📚 学习到新特征:', features);
+        return features;
+      } catch (e) {
+        console.log('学习功能出错:', e);
+        return null;
+      }
+    }
+
+    // ---- 事件绑定 ----
+    canvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    canvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp, { passive: false });
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault();
+      uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type.startsWith('image/')) {
+        resetAll();
+        loadImageFromFile(files[0]);
+      }
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (fileInput.files.length > 0 && fileInput.files[0].type.startsWith('image/')) {
+        resetAll();
+        loadImageFromFile(fileInput.files[0]);
+      }
+    });
+
+    // ---- 从learn.js加载学习数据 ----
+    function loadLearnedKeywords() {
+      if (typeof window.loadLearnedKeywordsData === 'function') {
+        return window.loadLearnedKeywordsData();
+      }
+      return [];
+    }
+
+    function saveLearnedKeyword(keyword) {
+      if (typeof window.saveLearnedKeywordData === 'function') {
+        window.saveLearnedKeywordData(keyword);
+      }
+    }
+
+    // 获取所有关键词（根据开关 + 学习）
+    function getAllKeywords() {
+      const keywords = [];
+      const learned = loadLearnedKeywords();
+      const custom = customKeywordInput ? customKeywordInput.value.split(/[\s,]+/).filter(k => k.length > 0) : [];
+
+      if (emailEnabled) {
+        keywords.push('@', '.com', '.cn', '.net', '.org', '.io', 'email', 'mail');
+        // 过滤学习到的邮箱相关关键词
+        const emailKeywords = learned.filter(k => 
+          k === '@' || k.startsWith('.') || k.includes('@') || 
+          k === 'email' || k === 'mail'
+        );
+        keywords.push(...emailKeywords);
+      }
+      if (amountEnabled) {
+        keywords.push('$', 'USD', 'EUR', 'CNY', '¥', '€', '£', 'per', 'kilo', 'kg');
+        // 过滤学习到的金额相关关键词
+        const amountKeywords = learned.filter(k => 
+          k === '$' || k === 'usd' || k === 'eur' || k === 'cny' || 
+          k === '¥' || k === '€' || k === '£' || k === 'per' || k === 'kilo' || k === 'kg'
+        );
+        keywords.push(...amountKeywords);
+      }
+      // 添加学习到的其他关键词（非邮箱/金额相关）
+      const otherKeywords = learned.filter(k => 
+        !k.startsWith('.') && !k.includes('@') && k !== 'email' && k !== 'mail' &&
+        k !== '$' && k !== 'usd' && k !== 'eur' && k !== 'cny' &&
+        k !== '¥' && k !== '€' && k !== '£' && k !== 'per' && k !== 'kilo' && k !== 'kg'
+      );
+      keywords.push(...otherKeywords, ...custom);
+      return [...new Set(keywords)];
+    }
+
+    // 邮箱开关
+    emailToggle.addEventListener('click', function() {
+      emailEnabled = !emailEnabled;
+      this.style.background = emailEnabled ? '#3b82f6' : '';
+      this.style.color = emailEnabled ? '#fff' : '';
+      this.style.borderColor = emailEnabled ? '#3b82f6' : '';
+      // 开关切换不自动识别，用户需要手动点击"自动识别"按钮
+    });
+
+    // 金额开关
+    amountToggle.addEventListener('click', function() {
+      amountEnabled = !amountEnabled;
+      this.style.background = amountEnabled ? '#3b82f6' : '';
+      this.style.color = amountEnabled ? '#fff' : '';
+      this.style.borderColor = amountEnabled ? '#3b82f6' : '';
+      // 开关切换不自动识别，用户需要手动点击"自动识别"按钮
+    });
+
+    // 关键词标记
+    markBtn.addEventListener('click', function() {
+      // 清除之前的标记，避免重复累加
+      markedRegions = [];
+      const keywords = getAllKeywords();
+      if (ocrModeEnabled) {
+        markKeywordsWithOCR(keywords);
+      } else {
+        markKeywords(keywords);
+      }
+    });
+
+    // OCR 模式切换 - 使用 checkbox change 事件确保状态同步
+    ocrModeCheckbox.addEventListener('change', function() {
+      ocrModeEnabled = ocrModeCheckbox.checked;
+      ocrToggle.classList.toggle('active', ocrModeEnabled);
+      statusBadge.innerText = ocrModeEnabled ? '🔮 OCR精确模式已开启' : '⚪ 已关闭OCR模式';
+    });
+
+    ocrLangSelect.addEventListener('change', function() {
+      // 切换语言时重置 worker，下次会自动用新语言加载
+      if (ocrWorker) {
+        ocrWorker.terminate();
+        ocrWorker = null;
+      }
+    });
+
+    // 打码标记区域
+    applyMarkedBtn.addEventListener('click', function() {
+      if (markedRegions.length === 0) return;
+      const blurSize = parseInt(blurLevelInput.value, 10);
+      applyMosaicsToRegions(markedRegions, blurSize);
+      // 清除标记
+      markedRegions = [];
+      updateUI();
+      statusBadge.innerText = `✅ 已打码完成`;
+    });
+
+    clearMarkersBtn.addEventListener('click', clearMarkers);
+
+    // 删除标记模式
+    deleteMarkerBtn.addEventListener('click', function() {
+      isDeleteMode = !isDeleteMode;
+      isWhitelistMode = false;
+      updateUI();
+      statusBadge.innerText = isDeleteMode ? '🗑️ 删除模式：点击标记区域删除' : '⚪ 已关闭删除模式';
+    });
+
+    // 白名单模式
+    whitelistBtn.addEventListener('click', function() {
+      isWhitelistMode = !isWhitelistMode;
+      isDeleteMode = false;
+      isBlacklistMode = false;
+      updateUI();
+      statusBadge.innerText = isWhitelistMode ? '➕ 白名单模式：框选区域加入白名单' : '⚪ 已关闭白名单模式';
+    });
+
+    // 黑名单模式
+    blacklistBtn.addEventListener('click', function() {
+      isBlacklistMode = !isBlacklistMode;
+      isDeleteMode = false;
+      isWhitelistMode = false;
+      updateUI();
+      statusBadge.innerText = isBlacklistMode ? '🚫 黑名单模式：框选区域加入黑名单' : '⚪ 已关闭黑名单模式';
+    });
+
+    undoBtn.addEventListener('click', undoLastMosaic);
+    clearMosaicBtn.addEventListener('click', clearAllMosaics);
+    resetBtn.addEventListener('click', resetAll);
+    downloadBtn.addEventListener('click', () => {
+      if (!imageLoaded) return;
+      const link = document.createElement('a');
+      link.download = `mosaic_${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+
+    // 导出学习数据
+    exportDataBtn.addEventListener('click', function() {
+      if (typeof window.downloadLearnedData === 'function') {
+        window.downloadLearnedData();
+        statusBadge.innerText = '📥 学习数据已导出为 learn_data.js';
+        updateDataStats();
+      }
+    });
+
+    // 导入学习数据
+    importDataBtn.addEventListener('click', function() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.js,.json';
+      input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          try {
+            let content = event.target.result;
+            // 如果是 JS 文件，提取 JSON 数据
+            if (file.name.endsWith('.js')) {
+              const match = content.match(/LEARNED_DATA\s*=\s*(\{[\s\S]*?\});/);
+              if (match) {
+                content = match[1];
+              }
+            }
+            const data = JSON.parse(content);
+            if (typeof window.importLearnedData === 'function') {
+              window.importLearnedData(data);
+              statusBadge.innerText = '📤 学习数据已导入';
+              updateDataStats();
+              // 导入后自动重新识别
+              if (imageLoaded) {
+                setTimeout(() => {
+                  markedRegions = [];
+                  markBtn.click();
+                }, 500);
+              }
+            }
+          } catch (err) {
+            statusBadge.innerText = '⚠️ 导入失败：文件格式错误';
+            console.error('导入失败:', err);
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    });
+
+    // 清除学习数据
+    clearDataBtn.addEventListener('click', function() {
+      if (confirm('确定要清除所有学习数据吗？此操作不可撤销。')) {
+        if (typeof window.clearAllLearnedData === 'function') {
+          window.clearAllLearnedData();
+          statusBadge.innerText = '🗑️ 所有学习数据已清除';
+          updateDataStats();
+          // 清除后自动重新识别
+          if (imageLoaded) {
+            setTimeout(() => {
+              markedRegions = [];
+              markBtn.click();
+            }, 500);
+          }
+        }
+      }
+    });
+
+    // 更新学习数据统计
+    function updateDataStats() {
+      if (typeof window.getLearnedDataStats === 'function') {
+        const stats = window.getLearnedDataStats();
+        const total = stats.whitelistCount + stats.blacklistCount + stats.keywordsCount + stats.patternsCount;
+        dataStats.textContent = `${total} 条规则`;
+        if (stats.hasDefaultData) {
+          dataStats.textContent += ' (含默认)';
+        }
+      }
+    }
+
+    // 初始化时更新统计
+    updateDataStats();
+
+    blurLevelInput.addEventListener('input', function() {
+      blurValueLabel.textContent = this.value;
+    });
+
+    // 支持回车触发标记
+    customKeywordInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        markedRegions = [];
+        markBtn.click();
+      }
+    });
+
+    // 输入关键字后自动重新识别（带防抖）
+    let keywordInputTimer = null;
+    customKeywordInput.addEventListener('input', function() {
+      if (keywordInputTimer) clearTimeout(keywordInputTimer);
+      keywordInputTimer = setTimeout(() => {
+        if (imageLoaded && this.value.trim()) {
+          markedRegions = [];
+          markBtn.click();
+        }
+      }, 800);
+    });
+
+    updateUI();
+    canvasWrapper.classList.remove('active');
+  })();
+</script>
+</body>
+</html>
