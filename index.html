@@ -2376,8 +2376,15 @@
           alert('🎉 同步请求已发送！\n\nGitHub Actions 正在处理更新，请等待几分钟后刷新页面查看效果。');
         } else {
           const errorData = await response.json();
-          statusBadge.innerText = `❌ 同步失败: ${errorData.message || '未知错误'}`;
+          const errorMsg = errorData.message || '未知错误';
+          statusBadge.innerText = `❌ 同步失败: ${errorMsg}`;
           console.error('GitHub API 错误:', errorData);
+          
+          if (response.status === 404) {
+            alert('❌ 同步失败：工作流文件未找到\n\n请先将 .github/workflows/update-learn-data.yml 提交到 GitHub 仓库。\n\n步骤：\n1. git add .github/workflows/update-learn-data.yml\n2. git commit -m "添加同步工作流"\n3. git push');
+          } else if (response.status === 401 || response.status === 403) {
+            alert('❌ 同步失败：权限不足\n\n请检查 GitHub Token 是否有 repo 权限，或 Token 是否已过期。');
+          }
         }
       } catch (error) {
         statusBadge.innerText = `❌ 同步失败: ${error.message}`;
