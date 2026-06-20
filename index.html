@@ -1361,8 +1361,43 @@
                 kwEnd = lineBbox.x1;
               } else {
                 const kwLower = matchedKW.toLowerCase();
-                const kwPos = lineText.indexOf(kwLower);
-                if (kwPos >= 0) {
+                let kwPos = lineText.indexOf(kwLower);
+                
+                // 货币类关键词：找到包含货币符号和数字的完整区域
+                if (isCurrencyKW && kwPos >= 0) {
+                  // 向前找：找到货币前的数字或行首/空格
+                  let startPos = kwPos;
+                  // 向前最多找30个字符，找数字或货币符号
+                  let searchStart = Math.max(0, kwPos - 30);
+                  for (let i = kwPos - 1; i >= searchStart; i--) {
+                    const ch = lineText[i];
+                    // 如果遇到换行或明显分隔符，停止
+                    if (ch === '\n' || ch === '\r') break;
+                    // 如果向前遇到另一个货币符号或@，停止
+                    if (ch === '$' || ch === '€' || ch === '¥' || ch === '@') break;
+                    startPos = i;
+                  }
+                  
+                  // 向后找：找到货币后的数字和文字
+                  let endPos = kwPos + kwLower.length;
+                  let searchEnd = Math.min(lineText.length, kwPos + 50);
+                  for (let i = endPos; i < searchEnd; i++) {
+                    const ch = lineText[i];
+                    // 如果遇到换行，停止
+                    if (ch === '\n' || ch === '\r') break;
+                    // 如果遇到另一个@符号（邮箱分隔），停止
+                    if (ch === '@') break;
+                    // 如果遇到逗号或句号后跟空格（句子结束），停止
+                    if ((ch === '.' || ch === ',') && i + 1 < lineText.length && lineText[i + 1] === ' ') {
+                      endPos = i + 1;
+                      break;
+                    }
+                    endPos = i + 1;
+                  }
+                  
+                  kwStart = lineBbox.x0 + Math.round(startPos * charWidth);
+                  kwEnd = lineBbox.x0 + Math.round(endPos * charWidth);
+                } else if (kwPos >= 0) {
                   // 关键词位置
                   kwStart = lineBbox.x0 + Math.round(kwPos * charWidth);
                   kwEnd = lineBbox.x0 + Math.round((kwPos + kwLower.length) * charWidth);
