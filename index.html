@@ -398,7 +398,7 @@
       <div class="btn-group">
         <button class="btn btn-outline" id="exportDataBtn">📥 导出学习数据</button>
         <button class="btn btn-outline" id="importDataBtn">📤 导入学习数据</button>
-        <button class="btn btn-outline" id="pushToGithubBtn" disabled>🚀 同步到 GitHub</button>
+        <button class="btn btn-outline" id="pushToGithubBtn">🚀 同步到 GitHub</button>
         <button class="btn btn-outline" id="clearDataBtn">🗑️ 清除学习数据</button>
         <span class="badge-count" id="dataStats">0 条规则</span>
       </div>
@@ -2258,16 +2258,20 @@
     updateDataStats();
 
     function loadGithubConfig() {
-      const token = localStorage.getItem('github_token');
-      const repo = localStorage.getItem('github_repo');
-      if (token && repo) {
-        githubToken.value = token;
-        githubRepo.value = repo;
-        pushToGithubBtn.disabled = false;
-        githubConfig.style.display = 'none';
-        return true;
-      }
-      return false;
+      const DEFAULT_TOKEN = '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';
+      const DEFAULT_REPO = 'muchengxin25-creator/OCR-ps';
+      
+      let token = localStorage.getItem('github_token');
+      let repo = localStorage.getItem('github_repo');
+      
+      if (!token) token = DEFAULT_TOKEN;
+      if (!repo) repo = DEFAULT_REPO;
+      
+      githubToken.value = token;
+      githubRepo.value = repo;
+      pushToGithubBtn.disabled = false;
+      githubConfig.style.display = 'none';
+      return true;
     }
 
     function saveGithubConfig() {
@@ -2285,11 +2289,8 @@
     }
 
     pushToGithubBtn.addEventListener('click', function() {
-      if (!loadGithubConfig()) {
-        githubConfig.style.display = 'block';
-        statusBadge.innerText = '⚠️ 请先配置 GitHub Token 和仓库地址';
-        return;
-      }
+      console.log('📤 点击同步按钮');
+      loadGithubConfig();
       pushToGithub();
     });
 
