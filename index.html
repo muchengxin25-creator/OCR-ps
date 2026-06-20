@@ -2349,6 +2349,7 @@
 
         if (commitResponse.ok) {
           statusBadge.innerText = '✅ 已成功同步到 GitHub';
+          alert('🎉 同步成功！\n\n学习数据已成功提交到 GitHub 仓库。\n其他用户刷新页面即可看到更新。');
         } else {
           const errorData = await commitResponse.json();
           statusBadge.innerText = `❌ 同步失败: ${errorData.message || '未知错误'}`;
